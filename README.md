@@ -23,17 +23,17 @@ git clone https://github.com/calebrob6/sentinel2-paint.git
 cd sentinel2-paint
 pip install -r requirements.txt
 
-# 1. tiny end-to-end demo (~2 windowed scenes) -> data_demo/
-python demo.py
+# 1. harvest colors from Sentinel-2 (resumable; ~10 min gives a starter palette)
+python harvest.py --data-dir data --minutes 10
 
-# 2. pack the demo palette into the web app -> web/
-python build_web.py data_demo
+# 2. pack the palette into the web app -> web/
+python build_web.py data
 
 # 3. serve it
 cd web && python -m http.server 8745   # open http://localhost:8745
 ```
 
-The demo reads only a 1024×1024 corner of two scenes, so it finishes in a few seconds and produces a small palette. For a full palette, run the exhaustive harvest below.
+`harvest.py` is append-only and resumable, so stop it whenever and rerun to keep growing the palette. A longer run (hours) fills out the rare colors; see the [scripts](#scripts) below for the full flag set.
 
 ## How it works
 
@@ -80,10 +80,6 @@ python build_web.py data 80000      # cap to ~80k colors for browser performance
 ```
 
 The optional second argument caps the palette via a **coverage-maximizing** downsample: it quantizes RGB at increasing resolution and keeps one color per occupied cell, so the colors most spread across the gamut survive (rare vivid colors are kept instead of being out-voted by dense regions).
-
-### `demo.py`
-
-Small end-to-end run (two windowed scenes → `data_demo/`) that exercises the full pipeline before committing to a long harvest. See [Quick start](#quick-start).
 
 ## Citation
 

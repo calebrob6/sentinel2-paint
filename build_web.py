@@ -4,7 +4,7 @@ Pack a harvested palette (patches.npy + meta.json) into web assets:
   web/atlas_000.png ...   sprite sheets, 64 patches per row, 32px cells
   web/colors.json         compact index: colors, atlas coords, geo + scene refs
 
-Usage:  python build_web.py <data_dir>   (default: data_demo)
+Usage:  python build_web.py <data_dir>   (default: data)
 """
 
 import os
@@ -103,6 +103,6 @@ def build(data_dir, out_dir="web", limit=None):
 
 
 if __name__ == "__main__":
-    data_dir = sys.argv[1] if len(sys.argv) > 1 else "data_demo"
+    data_dir = sys.argv[1] if len(sys.argv) > 1 else "data"
     limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
     build(data_dir, limit=limit)

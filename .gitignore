@@ -1,6 +1,5 @@
-# Harvested palettes / demo output (regenerate with harvest.py / demo.py)
+# Harvested palettes (regenerate with harvest.py)
 data/
-data_demo/
 
 # Built web assets (regenerate with build_web.py; the live site is hosted separately)
 web/atlas_*.jpg

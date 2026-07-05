@@ -55,8 +55,8 @@ def patches_from_visual(href, max_patches=None, max_dim=None):
     Yields tuples: (r, g, b, lon, lat, patch_uint8[32,32,3])
     Only patches with no nodata (black, off-swath) pixels are emitted.
 
-    max_dim: if set, only read the top-left max_dim x max_dim pixels (for fast
-             demos). None reads the full tile.
+    max_dim: if set, only read the top-left max_dim x max_dim pixels (for a
+             fast partial read). None reads the full tile.
     """
     with rasterio.Env(**GDAL_ENV):
         with rasterio.open(href) as ds:
