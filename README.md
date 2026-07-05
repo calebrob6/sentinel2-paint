@@ -1,4 +1,4 @@
-# s2-paint — Paint with Sentinel-2
+# sentinel2-paint — Paint with Sentinel-2
 
 **Jump to: [Live site](https://calebrob.com/static/s2-paint/) | [Quick start](#quick-start) | [How it works](#how-it-works) | [The app](#the-app) | [Scripts](#scripts) | [Repo layout](#repo-layout) | [Citation](#citation)**
 
@@ -14,8 +14,8 @@ Search the Sentinel-2 archive for 32×32 image patches whose **mean color** cove
 ## Quick start
 
 ```bash
-git clone https://github.com/calebrob6/s2-paint.git
-cd s2-paint
+git clone https://github.com/calebrob6/sentinel2-paint.git
+cd sentinel2-paint
 pip install -r requirements.txt
 
 # 1. tiny end-to-end demo (~2 windowed scenes) -> data_demo/
@@ -101,11 +101,11 @@ images/            figures embedded in this README
 If you use this repo, please cite it:
 
 ```bibtex
-@misc{robinson2026s2paint,
+@misc{robinson2026sentinel2paint,
   author       = {Robinson, Caleb},
-  title        = {{s2-paint}: paint with {Sentinel-2}},
+  title        = {{sentinel2-paint}: paint with {Sentinel-2}},
   year         = {2026},
-  howpublished = {\url{https://github.com/calebrob6/s2-paint}}
+  howpublished = {\url{https://github.com/calebrob6/sentinel2-paint}}
 }
 ```
 
