@@ -1,0 +1,6 @@
+numpy
+rasterio
+pyproj
+pillow
+planetary-computer
+pystac-client

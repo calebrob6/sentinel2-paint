@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Sentinel-2 Paint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --bg:#1a1612; --bg-soft:#221c16; --panel:rgba(32,26,21,0.82); --panel-strong:rgba(20,16,13,0.92);
+  --ink:#0e0b08; --text:#f3ecd8; --muted:#9a8f7a; --muted-strong:#d4c9ae;
+  --accent:#d0542c; --accent-strong:#e37148; --accent-dark:#a33d1a; --aoi:#e5a853;
+  --shadow-lg:0 28px 80px rgba(0,0,0,0.55),0 2px 0 rgba(255,255,255,0.04) inset;
+  --radius:14px; --radius-sm:8px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:"Inter Tight",sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.viewport{position:fixed;inset:0}
+/* z-index:1 makes these stacking contexts so Leaflet's internal panes/controls
+   (z up to 1000) stay BELOW the HUD panels (z 25-30) instead of overlaying them */
+#mapView{position:absolute;inset:0;z-index:1}
+#map{position:absolute;inset:0;background:var(--ink)}
+#canvasView{position:absolute;inset:0;z-index:1;background:
+  radial-gradient(ellipse at 50% 40%, #241d17 0%, #14100c 70%)}
+.viewport::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 50%,rgba(14,11,8,0.5) 100%)}
+.hidden{display:none !important}
+
+/* Brand + tabs */
+.brand{position:fixed;top:18px;left:20px;z-index:30;display:flex;gap:12px;align-items:center}
+.brand-mark{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 50% 35%, #2a2118, #14100c);border:1px solid rgba(255,255,255,.09);
+  box-shadow:0 0 22px rgba(208,84,44,.3)}
+.brand-mark svg{width:28px;height:28px;display:block}
+.brand h1{font-family:"Fraunces",serif;font-size:1.35rem;font-weight:500;margin:0;letter-spacing:-0.04em;font-variation-settings:"opsz" 144}
+.brand .kick{font-family:"JetBrains Mono",monospace;font-size:.6rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+.tabs{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:30;display:grid;grid-auto-flow:column;gap:5px;
+  background:rgba(20,16,13,.72);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.08);padding:5px;border-radius:15px;
+  box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.tab{font-family:"JetBrains Mono",monospace;font-size:.84rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  padding:11px 38px;border-radius:10px;color:var(--muted-strong);cursor:pointer;border:none;background:none;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.on{background:linear-gradient(180deg,var(--accent),var(--accent-dark));color:var(--ink);box-shadow:0 6px 20px rgba(208,84,44,.4),0 0 0 1px rgba(208,84,44,.35) inset}
+
+/* Panels */
+.glass{background:var(--panel);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);
+  border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);box-shadow:var(--shadow-lg)}
+.panel-L{position:fixed;left:20px;top:74px;width:330px;z-index:25;padding:16px;max-height:calc(100vh - 96px);overflow:auto}
+.panel-R{position:fixed;right:20px;top:104px;width:300px;z-index:25;padding:0;display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 128px)}
+.panel-R>.glass{padding:14px 16px}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:4px}
+
+.kicker{font-family:"JetBrains Mono",monospace;font-size:.6rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+h2{font-family:"Fraunces",serif;font-weight:500;font-size:1.05rem;margin:0 0 10px;letter-spacing:-0.02em}
+
+/* Color picker */
+.sv{position:relative;width:100%;height:148px;border-radius:var(--radius-sm);cursor:crosshair;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.sv canvas{width:100%;height:100%;display:block;image-rendering:auto}
+.sv .knob{position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6);transform:translate(-50%,-50%);pointer-events:none}
+.hue{margin-top:10px;-webkit-appearance:none;width:100%;height:12px;border-radius:6px;cursor:pointer;
+  background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.hue::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;border:2px solid var(--ink);box-shadow:0 0 0 2px rgba(255,255,255,.6)}
+.gamut-note{font-family:"JetBrains Mono",monospace;font-size:.54rem;letter-spacing:.06em;color:var(--muted);margin-top:8px;line-height:1.5}
+.gamut-note b{color:var(--accent-strong)}
+.rgbrow{display:grid;grid-template-columns:repeat(3,1fr) 1.5fr;gap:7px;margin-top:10px}
+.rgbrow label{display:flex;flex-direction:column;gap:3px;font-size:.56rem;color:var(--muted);font-family:"JetBrains Mono",monospace;letter-spacing:.1em;text-transform:uppercase}
+.rgbrow input{width:100%;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);border-radius:6px;color:var(--text);font-family:"JetBrains Mono",monospace;font-size:.78rem;padding:6px 5px;text-align:center}
+.rgbrow input:focus{outline:none;border-color:var(--accent)}
+
+.match{display:flex;flex-direction:column;gap:9px;margin-top:14px;padding:11px;border-radius:var(--radius-sm);background:rgba(0,0,0,.25)}
+.swpair{display:flex;align-items:center;justify-content:center;gap:14px}
+.swcol{display:flex;flex-direction:column;align-items:center;gap:4px}
+.swlab{font-family:"JetBrains Mono",monospace;font-size:.5rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.arrow{color:var(--accent-strong);font-size:1.3rem;margin-top:-14px}
+.sw{width:52px;height:52px;border-radius:7px;border:1px solid rgba(255,255,255,.14);image-rendering:pixelated;flex-shrink:0;display:block}
+.match .meta{text-align:center;font-family:"JetBrains Mono",monospace}
+.match .meta .hx{font-size:.8rem;color:var(--text)}
+.match .meta .d{font-size:.6rem;color:var(--accent-strong);margin-top:2px}
+.match .meta .s{font-size:.58rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+/* big hovered/selected preview (right panel) */
+.bigprev{display:flex;flex-direction:column;gap:11px}
+.bigchip{width:100%;aspect-ratio:1/1;image-rendering:pixelated;border-radius:11px;border:1px solid rgba(255,255,255,.14);box-shadow:0 12px 34px rgba(0,0,0,.5);cursor:zoom-in;transition:border-color .15s}
+.bigchip:hover{border-color:var(--accent-strong)}
+#swMatch{cursor:zoom-in}
+.biginfo{font-family:"JetBrains Mono",monospace;font-size:.62rem;line-height:1.55;color:var(--muted)}
+.bighex{display:flex;align-items:center;gap:8px;color:var(--text);font-size:.84rem;margin-bottom:4px}
+.bighex .bdot{width:15px;height:15px;border-radius:4px;border:1px solid rgba(255,255,255,.25)}
+.bigscene{color:var(--muted-strong);font-size:.68rem}
+.bigsub{font-size:.6rem}.bigcoord{font-size:.6rem;color:var(--accent-strong);margin-top:2px}
+
+/* Tools */
+.tools{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+.btn{font-family:"JetBrains Mono",monospace;font-size:.64rem;letter-spacing:.05em;text-transform:uppercase;
+  padding:7px 11px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.04);color:var(--muted-strong);transition:all .14s}
+.btn:hover{color:var(--text);border-color:rgba(255,255,255,.22)}
+.btn.block{display:block;width:100%;text-align:center;padding:9px 12px;margin-top:4px;background:linear-gradient(180deg,var(--accent),var(--accent-dark));color:var(--ink);border-color:transparent}
+.btn.block:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(208,84,44,.32)}
+.exlabel{font-family:"JetBrains Mono",monospace;font-size:.54rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);text-align:center;margin:11px 0 6px}
+.examples{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.examples img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:7px;cursor:pointer;display:block;
+  border:1px solid rgba(255,255,255,.12);transition:transform .14s,border-color .14s}
+.examples img:hover{border-color:var(--accent-strong);transform:translateY(-2px)}
+.row{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:.6rem;color:var(--muted);font-family:"JetBrains Mono",monospace;letter-spacing:.08em;text-transform:uppercase}
+.row select,.row input[type=range]{flex:1}
+.row select{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:var(--text);padding:5px;font-family:"JetBrains Mono",monospace;font-size:.68rem}
+input[type=range]{-webkit-appearance:none;height:5px;border-radius:3px;background:rgba(255,255,255,.14)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--bg);border:2px solid var(--accent);box-shadow:0 0 0 3px rgba(208,84,44,.18);cursor:pointer}
+.sectlab{font-family:"JetBrains Mono",monospace;font-size:.56rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:16px 0 2px;border-top:1px solid rgba(255,255,255,.07);padding-top:13px}
+
+/* Canvas board */
+.board-wrap{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);z-index:10;padding:14px;border-radius:var(--radius)}
+#board{display:block;border-radius:6px;cursor:pointer;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+.board-hint{text-align:center;margin-top:10px;font-family:"JetBrains Mono",monospace;font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* Readouts */
+.stat{display:flex;justify-content:space-between;font-family:"JetBrains Mono",monospace;font-size:.66rem;padding:3px 0;color:var(--muted)}
+.stat b{color:var(--text);font-weight:500}
+.empty{color:var(--muted);font-size:.64rem;font-family:"JetBrains Mono",monospace;line-height:1.5}
+.maptag{position:fixed;right:20px;bottom:18px;z-index:25;font-family:"JetBrains Mono",monospace;font-size:.56rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;background:var(--panel);padding:6px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.06)}
+.loading{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:var(--ink);font-family:"JetBrains Mono",monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);font-size:.7rem}
+
+/* help button + about popup */
+.help-btn{position:fixed;left:18px;bottom:16px;z-index:60;width:40px;height:40px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.14);background:var(--panel);backdrop-filter:blur(12px);color:var(--text);
+  font-family:"Fraunces",serif;font-size:1.3rem;line-height:1;cursor:pointer;box-shadow:var(--shadow-lg);transition:all .15s}
+.help-btn:hover{border-color:var(--accent-strong);color:var(--accent-strong);transform:translateY(-2px)}
+.help-overlay{position:fixed;inset:0;z-index:310;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:rgba(8,6,4,.8);backdrop-filter:blur(6px)}
+.help-card{position:relative;max-width:540px;width:100%;max-height:88vh;overflow:auto;padding:30px 34px}
+.help-card h2{font-family:"Fraunces",serif;font-weight:500;font-size:1.7rem;letter-spacing:-.02em;margin:0 0 4px}
+.help-lead{color:var(--muted-strong);font-size:.92rem;margin:0 0 16px}
+.help-card p{font-size:.82rem;line-height:1.62;color:var(--muted-strong);margin:0 0 12px}
+.help-card p b{color:var(--text);font-weight:600}
+.help-h{font-family:"JetBrains Mono",monospace;font-size:.68rem!important;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-strong)!important;margin:18px 0 5px!important}
+.help-close{position:absolute;top:14px;right:16px;width:28px;height:28px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--muted);cursor:pointer;font-size:.78rem}
+.help-close:hover{color:var(--text);border-color:rgba(255,255,255,.25)}
+.help-card .btn.block{margin-top:18px}
+
+/* selected-patch map pin + Leaflet popup theming */
+.leaflet-container{background:#0e0b08;font-family:"Inter Tight",sans-serif}
+.sel-pin-wrap{background:none;border:none}
+.sel-pin{filter:drop-shadow(0 3px 5px rgba(0,0,0,.55))}
+.sel-pin svg{display:block;animation:pinDrop .35s ease-out}
+@keyframes pinDrop{from{transform:translateY(-8px);opacity:0}to{transform:none;opacity:1}}
+.leaflet-popup-content-wrapper{background:var(--panel-strong);color:var(--text);border:1px solid rgba(255,255,255,.1);border-radius:8px;box-shadow:0 18px 42px rgba(0,0,0,.45)}
+.leaflet-popup-content{margin:8px 11px;font-family:"JetBrains Mono",monospace;font-size:.6rem;line-height:1.5}
+.leaflet-popup-tip{background:var(--panel-strong)}
+.leaflet-popup-close-button{color:var(--muted)!important}
+.pin-pop b{display:block;color:var(--accent-strong);font-size:.72rem;margin-bottom:2px}
+
+/* original-upload thumbnail (compare against the mosaic) */
+.orig-thumb{position:absolute;left:70px;bottom:18px;z-index:18;padding:8px;border-radius:12px;cursor:zoom-in;
+  background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid rgba(255,255,255,.08);box-shadow:var(--shadow-lg);transition:all .2s}
+.orig-thumb:hover{border-color:var(--accent-strong)}
+.orig-thumb img{display:block;max-width:172px;max-height:172px;border-radius:7px}
+.orig-lab{font-family:"JetBrains Mono",monospace;font-size:.52rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:center;margin-top:6px}
+/* full-screen enlarged original — child of .viewport so it sits ABOVE all panels */
+.orig-overlay{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;
+  padding:32px;cursor:zoom-out;background:rgba(8,6,4,.85);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.orig-overlay img{max-width:94vw;max-height:90vh;border-radius:12px;border:1px solid rgba(255,255,255,.16);box-shadow:0 30px 90px rgba(0,0,0,.7)}
+.orig-overlay .orig-cap{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);font-family:"JetBrains Mono",monospace;font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+/* mosaic progress bar */
+.mo-progress{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(14,11,8,.4);backdrop-filter:blur(2px)}
+.mo-prog-card{padding:18px 22px;min-width:320px}
+.mo-prog-label{font-family:"JetBrains Mono",monospace;font-size:.62rem;letter-spacing:.06em;color:var(--muted-strong);margin-bottom:11px;text-align:center}
+.mo-prog-track{height:9px;border-radius:5px;background:rgba(255,255,255,.1);overflow:hidden}
+.mo-prog-fill{height:100%;width:0%;border-radius:5px;background:linear-gradient(90deg,var(--accent),var(--aoi))}
+
+@media (max-width:1180px){.board-wrap{transform:translate(-50%,-50%) scale(.82)}}
+</style>
+</head>
+<body>
+<div class="viewport">
+  <div id="mapView"><div id="map"></div></div>
+  <div id="canvasView" class="hidden">
+    <div class="board-wrap glass"><canvas id="board"></canvas>
+      <div class="board-hint" id="boardHint">upload an image · scroll = zoom · middle/right-drag = pan · click a tile → find it on the map</div></div>
+    <div id="moProgress" class="mo-progress hidden">
+      <div class="mo-prog-card glass">
+        <div class="mo-prog-label" id="moProgLabel">Rebuilding…</div>
+        <div class="mo-prog-track"><div class="mo-prog-fill" id="moProgFill"></div></div>
+      </div>
+    </div>
+    <div id="origThumb" class="orig-thumb hidden">
+      <img id="origImg" alt="original upload">
+      <div class="orig-lab" id="origLab">original · click to enlarge</div>
+    </div>
+  </div>
+
+  <div class="brand"><div class="brand-mark">
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M2 29 Q16 22 30 29" fill="none" stroke="#3b82f6" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M16 12.5 L11.5 25 L20.5 25 Z" fill="#e5a853" opacity="0.4"/>
+      <rect x="3.6" y="7.4" width="6.8" height="4.4" rx="0.8" fill="#3b82f6" stroke="#e5a853" stroke-width=".5"/>
+      <rect x="21.6" y="7.4" width="6.8" height="4.4" rx="0.8" fill="#3b82f6" stroke="#e5a853" stroke-width=".5"/>
+      <rect x="12.3" y="6.2" width="7.4" height="6.6" rx="1.4" fill="#d0542c"/>
+      <line x1="16" y1="6.2" x2="16" y2="2.8" stroke="#f3ecd8" stroke-width="1.3"/>
+      <circle cx="16" cy="2.3" r="1.5" fill="#f3ecd8"/>
+    </svg></div>
+    <div><h1>Sentinel-2 Paint</h1><div class="kick">photo → satellite mosaic</div></div></div>
+  <div class="tabs">
+    <button class="tab on" id="tabCanvas">▦ Canvas</button>
+    <button class="tab" id="tabMap">◍ Map</button>
+  </div>
+
+  <!-- LEFT: pigment picker (shared) + canvas tools -->
+  <div class="panel-L glass">
+    <p class="kicker">Pigment · Earth-only gamut</p>
+    <div class="sv" id="sv"><canvas id="svc" width="240" height="148"></canvas><div class="knob" id="svknob"></div></div>
+    <input type="range" class="hue" id="hue" min="0" max="360" value="20" />
+    <div class="gamut-note">Bright zones = colors Sentinel-2 actually contains. Picks <b>snap</b> to the nearest real Earth patch.</div>
+    <div class="rgbrow">
+      <label>R<input id="inR" type="number" min="0" max="255" value="0"></label>
+      <label>G<input id="inG" type="number" min="0" max="255" value="0"></label>
+      <label>B<input id="inB" type="number" min="0" max="255" value="0"></label>
+      <label>HEX<input id="inHex" type="text" value="#000000"></label>
+    </div>
+    <div class="match">
+      <div class="swpair">
+        <div class="swcol"><div class="sw" id="swPick" style="background:#000"></div><span class="swlab">your pick</span></div>
+        <div class="arrow">→</div>
+        <div class="swcol"><canvas class="sw" id="swMatch" width="32" height="32"></canvas><span class="swlab">nearest real</span></div>
+      </div>
+      <div class="meta"><div class="hx" id="mHex">—</div><div class="d" id="mDist">—</div><div class="s" id="mScene">—</div></div>
+    </div>
+
+    <div id="canvasTools" class="hidden">
+      <div class="sectlab">Recreate an image</div>
+      <button class="btn block" id="bUpload">⬆ Upload an image</button>
+      <div class="exlabel">or click an example</div>
+      <div class="examples" id="examples"></div>
+      <div class="row"><span>Detail</span><input type="range" id="moDetail" min="24" max="400" value="150"><span id="moDetailV" style="min-width:30px;text-align:right">150</span></div>
+      <div class="row"><span>Random</span><input type="range" id="moRand" min="0" max="100" value="30"><span id="moRandV" style="min-width:30px;text-align:right">30</span></div>
+      <div class="tools">
+        <button class="btn" id="bReroll">↻ Re-roll</button>
+        <button class="btn" id="bSave">↓ Save PNG</button>
+        <button class="btn" id="bClear">✕ Clear</button>
+      </div>
+      <input type="file" id="fileIn" accept="image/*" class="hidden">
+    </div>
+  </div>
+
+  <!-- RIGHT: contextual readout -->
+  <div class="panel-R">
+    <div class="glass">
+      <p class="kicker">Palette</p>
+      <div class="stat"><span>unique earth colors</span><b id="sColors">—</b></div>
+      <div class="stat"><span>source scenes</span><b id="sScenes">—</b></div>
+      <div class="stat" id="statPainted"><span>mosaic tiles</span><b id="sPainted">0</b></div>
+    </div>
+    <div class="glass" id="rContext">
+      <p class="kicker" id="ctxTitle">Selected color · on Earth</p>
+      <div id="ctxBody"><div class="empty">Pick a color — the globe flies to where Sentinel-2 saw it.</div></div>
+    </div>
+  </div>
+  <div class="maptag" id="maptag">globe</div>
+  <div id="origOverlay" class="orig-overlay hidden"><img id="origBig" alt="original upload (enlarged)"><div class="orig-cap">original · click to close</div></div>
+
+  <button id="helpBtn" class="help-btn" title="About Sentinel-2 Paint" aria-label="Help">?</button>
+  <div id="helpOverlay" class="help-overlay hidden">
+    <div class="help-card glass">
+      <button class="help-close" id="helpClose" aria-label="Close">✕</button>
+      <h2>Sentinel-2 Paint</h2>
+      <p class="help-lead">Recreate any image out of real satellite imagery.</p>
+      <p>Every tile you see is a real <b>32×32-pixel patch</b> from the <b>Sentinel-2</b> satellite archive, averaged down to a single color. Over a million unique patch-colors were harvested from hundreds of scenes across the planet.</p>
+      <p class="help-h">▦ Canvas</p>
+      <p>Upload a photo — or click an example — and it's rebuilt as a mosaic of those satellite patches. <b>Detail</b> sets the resolution; <b>Random</b> adds color variety. Click any tile to fly to where on Earth it came from. Scroll to zoom, middle/right-drag to pan, and <b>Save&nbsp;PNG</b> to export.</p>
+      <p class="help-h">◍ Map</p>
+      <p>Pick a color and the globe flies to the exact place Sentinel-2 saw it. The colored dots are a sample of the whole palette — click one to grab that color.</p>
+      <p class="help-h">⊹ The picker</p>
+      <p>Only colors that actually occur in the imagery are selectable (the bright zones of the picker); every pick <b>snaps</b> to the nearest real Earth patch.</p>
+      <button class="btn block" id="helpGo">Start painting →</button>
+    </div>
+  </div>
+</div>
+<div class="loading" id="loading">harvesting pigments…</div>
+
+<script>
+const PATCH=32;
+let DATA=null, atlases=[], buckets=null, BK=16;
+let OCC=null, OQ=32;                 // occupancy grid for the picker gamut mask
+const state={tab:'canvas', selIdx:-1, previewIdx:-1, hue:20, sv:[1,0.5],
+  gridW:24, gridH:24, cells:null,
+  boardZoom:1, boardPanX:0, boardPanY:0};
+
+/* ---------- color math ---------- */
+function hsvToRgb(h,s,v){h/=360;const i=Math.floor(h*6),f=h*6-i,p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);
+  let r,g,b;switch(i%6){case 0:r=v,g=t,b=p;break;case 1:r=q,g=v,b=p;break;case 2:r=p,g=v,b=t;break;
+  case 3:r=p,g=q,b=v;break;case 4:r=t,g=p,b=v;break;default:r=v,g=p,b=q}return [Math.round(r*255),Math.round(g*255),Math.round(b*255)];}
+function rgbToHsv(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+  let h=0;if(d){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;if(h<0)h+=360;}
+  return [h, mx?d/mx:0, mx];}
+const hx=n=>n.toString(16).padStart(2,'0');
+const toHex=([r,g,b])=>'#'+hx(r)+hx(g)+hx(b);
+
+/* ---------- nearest-color (16^3 buckets) ---------- */
+function buildBuckets(){buckets=Array.from({length:BK*BK*BK},()=>[]);const C=DATA.colors;
+  for(let i=0;i<C.length;i++)buckets[((C[i][0]>>4)*BK+(C[i][1]>>4))*BK+(C[i][2]>>4)].push(i);}
+function nearest(tr,tg,tb){const qr=Math.min(BK-1,tr>>4),qg=Math.min(BK-1,tg>>4),qb=Math.min(BK-1,tb>>4);
+  let best=-1,bestD=Infinity;const C=DATA.colors;
+  for(let rad=0;rad<BK;rad++){if(best>=0&&((rad-1)*16)*((rad-1)*16)>bestD)break;
+    for(let dr=-rad;dr<=rad;dr++)for(let dg=-rad;dg<=rad;dg++)for(let db=-rad;db<=rad;db++){
+      if(Math.max(Math.abs(dr),Math.abs(dg),Math.abs(db))!==rad)continue;
+      const r=qr+dr,g=qg+dg,b=qb+db;if(r<0||g<0||b<0||r>=BK||g>=BK||b>=BK)continue;
+      const arr=buckets[(r*BK+g)*BK+b];for(let k=0;k<arr.length;k++){const i=arr[k];
+        const er=C[i][0]-tr,eg=C[i][1]-tg,eb=C[i][2]-tb,d=er*er+eg*eg+eb*eb;if(d<bestD){bestD=d;best=i;}}}}
+  return {idx:best,dist:Math.sqrt(bestD)};}
+
+/* nearest, but pick at random among patches within `tol` ΔRGB of the best match.
+   tol=0 => exact nearest. Larger tol => more variety (breaks up flat areas). */
+function nearestRandom(tr,tg,tb,tol){if(tol<=0)return nearest(tr,tg,tb).idx;
+  const qr=Math.min(BK-1,tr>>4),qg=Math.min(BK-1,tg>>4),qb=Math.min(BK-1,tb>>4),C=DATA.colors;
+  let best=Infinity;const ci=[],cd=[];
+  for(let rad=0;rad<BK;rad++){
+    if(ci.length&&((rad-1)*16)>best+tol)break;   // no closer-than-best+tol color can remain
+    for(let dr=-rad;dr<=rad;dr++)for(let dg=-rad;dg<=rad;dg++)for(let db=-rad;db<=rad;db++){
+      if(Math.max(Math.abs(dr),Math.abs(dg),Math.abs(db))!==rad)continue;
+      const r=qr+dr,g=qg+dg,b=qb+db;if(r<0||g<0||b<0||r>=BK||g>=BK||b>=BK)continue;
+      const arr=buckets[(r*BK+g)*BK+b];for(let k=0;k<arr.length;k++){const idx=arr[k];
+        const er=C[idx][0]-tr,eg=C[idx][1]-tg,eb=C[idx][2]-tb,d=Math.sqrt(er*er+eg*eg+eb*eb);
+        if(d<best)best=d;ci.push(idx);cd.push(d);}}}
+  const lim=best+tol,pool=[];for(let k=0;k<ci.length;k++)if(cd[k]<=lim)pool.push(ci[k]);
+  return pool.length?pool[(Math.random()*pool.length)|0]:nearest(tr,tg,tb).idx;}
+
+/* occupancy grid (dilated) so the picker can show the reachable Earth gamut */
+function buildOcc(){const N=OQ*OQ*OQ,raw=new Uint8Array(N),C=DATA.colors,sc=OQ/256;
+  for(let i=0;i<C.length;i++){const r=Math.min(OQ-1,C[i][0]*sc|0),g=Math.min(OQ-1,C[i][1]*sc|0),b=Math.min(OQ-1,C[i][2]*sc|0);raw[(r*OQ+g)*OQ+b]=1;}
+  OCC=new Uint8Array(N); // dilate by 1 cell for a smoother mask
+  for(let r=0;r<OQ;r++)for(let g=0;g<OQ;g++)for(let b=0;b<OQ;b++){let on=0;
+    for(let dr=-1;dr<=1&&!on;dr++)for(let dg=-1;dg<=1&&!on;dg++)for(let db=-1;db<=1&&!on;db++){
+      const rr=r+dr,gg=g+dg,bb=b+db;if(rr<0||gg<0||bb<0||rr>=OQ||gg>=OQ||bb>=OQ)continue;if(raw[(rr*OQ+gg)*OQ+bb])on=1;}
+    OCC[(r*OQ+g)*OQ+b]=on;}}
+function available(r,g,b){const sc=OQ/256;return OCC[((Math.min(OQ-1,r*sc|0))*OQ+(Math.min(OQ-1,g*sc|0)))*OQ+(Math.min(OQ-1,b*sc|0))];}
+
+/* ---------- atlas blitting ---------- */
+function patchSrc(i){const c=DATA.colors[i],cols=DATA.atlas_cols;return {img:atlases[c[3]],sx:(c[4]%cols)*PATCH,sy:Math.floor(c[4]/cols)*PATCH};}
+function drawPatch(ctx,i,dx,dy,dw,dh){const s=patchSrc(i);if(s.img&&s.img.complete)ctx.drawImage(s.img,s.sx,s.sy,PATCH,PATCH,dx,dy,dw,dh);}
+
+/* ---------- picker ---------- */
+const svc=document.getElementById('svc'),svctx=svc.getContext('2d');
+function renderSV(){const h=state.hue,w=svc.width,ht=svc.height,img=svctx.createImageData(w,ht);
+  for(let y=0;y<ht;y++)for(let x=0;x<w;x++){const rgb=hsvToRgb(h,x/(w-1),1-y/(ht-1));const o=(y*w+x)*4;
+    if(available(rgb[0],rgb[1],rgb[2])){img.data[o]=rgb[0];img.data[o+1]=rgb[1];img.data[o+2]=rgb[2];}
+    else{img.data[o]=rgb[0]*0.16+18;img.data[o+1]=rgb[1]*0.16+14;img.data[o+2]=rgb[2]*0.16+11;}
+    img.data[o+3]=255;}
+  svctx.putImageData(img,0,0);}
+function placeKnob(){const k=document.getElementById('svknob');k.style.left=state.sv[0]*100+'%';k.style.top=(1-state.sv[1])*100+'%';}
+
+/* choose a color: snap to nearest available palette color, update everything */
+function selectColor(rawRgb, fromPicker, fly){
+  const m=nearest(rawRgb[0],rawRgb[1],rawRgb[2]);if(m.idx<0)return;
+  state.selIdx=m.idx;const c=DATA.colors[m.idx],col=c.slice(0,3);
+  document.getElementById('inR').value=col[0];document.getElementById('inG').value=col[1];document.getElementById('inB').value=col[2];
+  document.getElementById('inHex').value=toHex(col);
+  if(!fromPicker){const hsv=rgbToHsv(...col);state.hue=hsv[0];state.sv=[hsv[1],hsv[2]];
+    document.getElementById('hue').value=Math.round(hsv[0]);renderSV();placeKnob();}
+  // show the raw pick, an arrow, and the snapped real Earth patch it maps to
+  document.getElementById('swPick').style.background=toHex(rawRgb);
+  const mc=document.getElementById('swMatch').getContext('2d');mc.clearRect(0,0,32,32);drawPatch(mc,m.idx,0,0,32,32);
+  const sc=DATA.scenes[c[7]];
+  document.getElementById('mHex').textContent=toHex(rawRgb)+' → '+toHex(col);
+  document.getElementById('mDist').textContent=m.dist<0.5?'exact match — this color exists on Earth':'snapped Δ'+m.dist.toFixed(0)+' to the nearest real color';
+  document.getElementById('mScene').textContent=sc[0];
+  updateSelectedReadout();updateSelPin();if(fly)flyToSelected();
+}
+function svFromEvent(e){const r=document.getElementById('sv').getBoundingClientRect();
+  let x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;x=Math.max(0,Math.min(1,x));y=Math.max(0,Math.min(1,y));
+  state.sv=[x,1-y];placeKnob();selectColor(hsvToRgb(state.hue,x,1-y),true,false);}
+(function(){const sv=document.getElementById('sv');let down=false;
+  sv.addEventListener('pointerdown',e=>{
+    if(e.ctrlKey||e.metaKey){svFromEvent(e);jumpToSelected();return;} // ctrl/⌘-click -> jump to map
+    down=true;sv.setPointerCapture(e.pointerId);svFromEvent(e);});
+  sv.addEventListener('pointermove',e=>{if(down)svFromEvent(e);});
+  sv.addEventListener('pointerup',()=>{down=false;flyToSelected();});
+  document.getElementById('hue').addEventListener('input',e=>{state.hue=+e.target.value;renderSV();selectColor(hsvToRgb(state.hue,state.sv[0],state.sv[1]),true,false);});
+  document.getElementById('hue').addEventListener('change',()=>flyToSelected()); // NOT (flyToSelected) — that passes the event as the zoom arg
+  ['inR','inG','inB'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{
+    selectColor(['inR','inG','inB'].map(i=>Math.max(0,Math.min(255,+document.getElementById(i).value||0))),false,true);}));
+  document.getElementById('inHex').addEventListener('change',e=>{const m=e.target.value.replace('#','');
+    if(m.length===6)selectColor([0,2,4].map(i=>parseInt(m.substr(i,2),16)),false,true);});
+})();
+// click a satellite-imagery preview -> jump to it on the map
+document.getElementById('swMatch').addEventListener('click',()=>jumpToSelected());
+document.getElementById('ctxBody').addEventListener('click',()=>{if(state.previewIdx>=0)jumpToIdx(state.previewIdx);});
+
+/* ---------- canvas board (gridW x gridH) ---------- */
+const board=document.getElementById('board');let bctx,cellPx;
+function fitCell(){const availW=window.innerWidth-700,availH=window.innerHeight-140;
+  return Math.max(3,Math.floor(Math.min(availW/state.gridW,availH/state.gridH)));}
+function applyBoardZoom(){const w=document.querySelector('.board-wrap');if(w)
+  w.style.transform=`translate(calc(-50% + ${state.boardPanX}px), calc(-50% + ${state.boardPanY}px)) scale(${state.boardZoom})`;}
+function setupBoard(w,h,cells){state.gridW=w;state.gridH=h;
+  state.cells=cells||new Int32Array(w*h).fill(-1);
+  cellPx=fitCell();board.width=w*cellPx;board.height=h*cellPx;bctx=board.getContext('2d');
+  state.boardZoom=1;state.boardPanX=0;state.boardPanY=0;applyBoardZoom();
+  paintAll();updateStats();refreshPins();}
+function paintAll(){bctx.fillStyle='#0e0b08';bctx.fillRect(0,0,board.width,board.height);
+  let any=false;
+  for(let i=0;i<state.cells.length;i++){const ci=state.cells[i];if(ci<0)continue;any=true;
+    const x=(i%state.gridW)*cellPx,y=Math.floor(i/state.gridW)*cellPx;drawPatch(bctx,ci,x,y,cellPx,cellPx);}
+  if(!any){bctx.fillStyle='#6f6450';bctx.textAlign='center';bctx.textBaseline='middle';
+    bctx.font='600 '+Math.max(13,Math.min(20,board.width/26))+'px "JetBrains Mono",monospace';
+    bctx.fillText('⬆  upload an image to recreate it',board.width/2,board.height/2);}}
+function cellAt(e){const r=board.getBoundingClientRect();
+  const x=Math.floor((e.clientX-r.left)/r.width*state.gridW),y=Math.floor((e.clientY-r.top)/r.height*state.gridH);
+  if(x<0||y<0||x>=state.gridW||y>=state.gridH)return -1;return y*state.gridW+x;}
+let panning=false,panStart=null;
+board.addEventListener('contextmenu',e=>e.preventDefault());      // right-drag / mac ctrl-click: no menu
+board.addEventListener('auxclick',e=>e.preventDefault());
+board.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault();}); // stop middle-click autoscroll
+board.addEventListener('pointerdown',e=>{
+  if(e.button===1||e.button===2){ // middle OR right button -> pan the canvas
+    e.preventDefault();panning=true;panStart={x:e.clientX,y:e.clientY,px:state.boardPanX,py:state.boardPanY};
+    board.setPointerCapture(e.pointerId);board.style.cursor='grabbing';return;}
+  const cell=cellAt(e);
+  if(cell>=0&&state.cells&&state.cells[cell]>=0)jumpToIdx(state.cells[cell]); // tile -> jump to it on Earth
+  else openUpload();});                                                       // blank canvas -> upload prompt
+board.addEventListener('pointermove',e=>{
+  if(panning){state.boardPanX=panStart.px+(e.clientX-panStart.x);state.boardPanY=panStart.py+(e.clientY-panStart.y);applyBoardZoom();return;}
+  showHover(cellAt(e));});
+board.addEventListener('pointerup',()=>{if(panning){panning=false;board.style.cursor='';}});
+board.addEventListener('pointercancel',()=>{panning=false;board.style.cursor='';});
+// scroll-wheel zoom on the canvas (anchored at the cursor)
+document.getElementById('canvasView').addEventListener('wheel',e=>{
+  if(state.tab!=='canvas')return;e.preventDefault();
+  const old=state.boardZoom;let z=old*(e.deltaY<0?1.12:1/1.12);z=Math.max(0.3,Math.min(10,z));
+  if(z!==old){const k=z/old,bx=window.innerWidth/2,by=window.innerHeight*0.52;
+    const Px=bx+state.boardPanX,Py=by+state.boardPanY;
+    state.boardPanX+=(k-1)*(Px-e.clientX);state.boardPanY+=(k-1)*(Py-e.clientY);
+    state.boardZoom=z;applyBoardZoom();}
+},{passive:false});
+
+// render each tile at full patch resolution (up to 32px) into an offscreen canvas,
+// not the shrunk on-screen board -> high-resolution export
+function savePNG(){if(!state.cells)return;let any=false;for(const c of state.cells)if(c>=0){any=true;break;}
+  if(!any){document.getElementById('boardHint').textContent='nothing to save — upload an image first';return;}
+  const pp=Math.max(8,Math.min(32,Math.floor(16000/Math.max(state.gridW,state.gridH)))); // cap longest side ~16k px
+  const off=document.createElement('canvas');off.width=state.gridW*pp;off.height=state.gridH*pp;
+  const oc=off.getContext('2d');oc.imageSmoothingEnabled=false;oc.fillStyle='#0e0b08';oc.fillRect(0,0,off.width,off.height);
+  for(let i=0;i<state.cells.length;i++){const ci=state.cells[i];if(ci<0)continue;
+    drawPatch(oc,ci,(i%state.gridW)*pp,Math.floor(i/state.gridW)*pp,pp,pp);}
+  const a=document.createElement('a');a.download='terrapaint.png';a.href=off.toDataURL('image/png');a.click();}
+document.getElementById('bSave').addEventListener('click',savePNG);
+function clearBoard(){if(lastImgURL){URL.revokeObjectURL(lastImgURL);lastImgURL=null;}lastImg=null;
+  document.getElementById('origThumb').classList.add('hidden');
+  document.getElementById('boardHint').textContent='upload an image · scroll = zoom · middle/right-drag = pan · click a tile → find it on the map';
+  setupBoard(24,24);}
+document.getElementById('bClear').addEventListener('click',clearBoard);
+document.getElementById('moDetail').addEventListener('input',e=>document.getElementById('moDetailV').textContent=e.target.value);
+document.getElementById('moRand').addEventListener('input',e=>document.getElementById('moRandV').textContent=e.target.value);
+document.getElementById('bReroll').addEventListener('click',()=>{if(lastImg)buildMosaic(lastImg);
+  else document.getElementById('boardHint').textContent='upload an image first, then re-roll';});
+
+/* ---------- image -> mosaic ---------- */
+// clear value first so picking the SAME file again still fires 'change'
+function openUpload(){const fi=document.getElementById('fileIn');fi.value='';fi.click();}
+document.getElementById('bUpload').addEventListener('click',openUpload);
+let lastImgURL=null;
+document.getElementById('fileIn').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;
+  if(lastImgURL)URL.revokeObjectURL(lastImgURL);          // free the previous original
+  const url=URL.createObjectURL(f);lastImgURL=url;const img=new Image();
+  img.onload=()=>{ // keep url alive so the original thumbnail can display it
+    document.getElementById('origImg').src=url;
+    document.getElementById('origThumb').classList.remove('hidden','big');
+    buildMosaic(img);};
+  img.onerror=()=>{URL.revokeObjectURL(url);lastImgURL=null;mosaicBusy=false;hideProg();
+    document.getElementById('boardHint').textContent='could not read that image — try a JPG or PNG';};
+  img.src=url;});
+// click the thumbnail -> open the enlarged original in a full-screen overlay (above all UI)
+document.getElementById('origThumb').addEventListener('click',()=>{
+  document.getElementById('origBig').src=document.getElementById('origImg').src;
+  document.getElementById('origOverlay').classList.remove('hidden');});
+document.getElementById('origOverlay').addEventListener('click',()=>document.getElementById('origOverlay').classList.add('hidden'));
+// example images (same-origin) -> click to recreate
+const EXAMPLES=[['examples/marymoor.png','Marymoor Park'],['examples/nasa_logo.png','NASA'],['examples/nasa_harvest.png','Harvest']];
+(function(){const wrap=document.getElementById('examples');EXAMPLES.forEach(([src,name])=>{
+  const im=new Image();im.src=src;im.alt=name;im.title='Recreate: '+name;
+  im.addEventListener('click',()=>loadExample(src,name));wrap.appendChild(im);});})();
+function loadExample(src,name){const img=new Image();
+  img.onload=()=>{document.getElementById('origImg').src=src;
+    document.getElementById('origThumb').classList.remove('hidden');buildMosaic(img);};
+  img.onerror=()=>{document.getElementById('boardHint').textContent='could not load example "'+name+'"';};
+  img.src=src;}
+let mosaicBusy=false;
+function showProg(){document.getElementById('moProgress').classList.remove('hidden');}
+function hideProg(){document.getElementById('moProgress').classList.add('hidden');}
+function setProg(done,total){const pct=Math.round(done/total*100);
+  document.getElementById('moProgFill').style.width=pct+'%';
+  document.getElementById('moProgLabel').textContent=`Rebuilding from ${total.toLocaleString()} patches — ${pct}%`;}
+let lastImg=null;
+function buildMosaic(img){if(mosaicBusy)return;
+  if(!img.width||!img.height){document.getElementById('boardHint').textContent='could not read that image — try a JPG or PNG';return;}
+  lastImg=img;
+  const detail=+document.getElementById('moDetail').value;
+  const tol=(+document.getElementById('moRand').value)*0.6;   // 0..100 slider -> 0..60 ΔRGB
+  let gw,gh;if(img.width>=img.height){gw=detail;gh=Math.max(6,Math.round(detail*img.height/img.width));}
+  else{gh=detail;gw=Math.max(6,Math.round(detail*img.width/img.height));}
+  const off=document.createElement('canvas');off.width=gw;off.height=gh;const oc=off.getContext('2d');
+  oc.imageSmoothingEnabled=true;oc.fillStyle='#ffffff';oc.fillRect(0,0,gw,gh);  // flatten transparency onto white
+  oc.drawImage(img,0,0,gw,gh);const px=oc.getImageData(0,0,gw,gh).data;
+  const total=gw*gh,cells=new Int32Array(total),CHUNK=1500;let i=0;
+  mosaicBusy=true;setProg(0,total);showProg();
+  function finishErr(err){console.error('mosaic failed',err);hideProg();mosaicBusy=false;
+    document.getElementById('boardHint').textContent='mosaic failed — see console';}
+  function step(){
+    try{const end=Math.min(i+CHUNK,total);
+      for(;i<end;i++){const o=i*4;cells[i]=nearestRandom(px[o],px[o+1],px[o+2],tol);}
+    }catch(err){return finishErr(err);}
+    setProg(i,total);
+    if(i<total){requestAnimationFrame(step);return;}
+    try{setupBoard(gw,gh,cells);
+      const used=new Set(cells).size;  // distinct patches actually placed, not tile count
+      document.getElementById('boardHint').textContent=`rebuilt your image from ${used.toLocaleString()} unique sentinel-2 patches across ${total.toLocaleString()} tiles`;
+    }catch(err){return finishErr(err);}
+    hideProg();mosaicBusy=false;}
+  requestAnimationFrame(step);}
+
+/* ---------- right panel readouts ---------- */
+function bigPrev(idx){const c=DATA.colors[idx],sc=DATA.scenes[c[7]],hex=toHex(c.slice(0,3));
+  return `<div class="bigprev"><canvas class="bigchip" id="bigC" width="32" height="32"></canvas>
+    <div class="biginfo"><div class="bighex"><span class="bdot" style="background:${hex}"></span>${hex}</div>
+    <div class="bigscene">${sc[0]}</div><div class="bigsub">${sc[1]}</div>
+    <div class="bigcoord">${c[6].toFixed(4)}, ${c[5].toFixed(4)}</div></div></div>`;}
+function paintBig(idx){const cv=document.getElementById('bigC');if(cv){const x=cv.getContext('2d');x.imageSmoothingEnabled=false;drawPatch(x,idx,0,0,32,32);}}
+function showHover(cell){const t=document.getElementById('ctxTitle'),el=document.getElementById('ctxBody');
+  if(state.tab!=='canvas')return;t.textContent='Under the cursor';
+  if(cell<0||!state.cells||state.cells[cell]<0)return;  // keep the last preview so it stays clickable
+  const ci=state.cells[cell],c=DATA.colors[ci];state.previewIdx=ci;
+  el.innerHTML=bigPrev(ci);paintBig(ci);flashMarker(c[5],c[6]);}
+function updateSelectedReadout(){if(state.tab!=='map')return;
+  const t=document.getElementById('ctxTitle'),el=document.getElementById('ctxBody');t.textContent='Selected color · on Earth';
+  if(state.selIdx<0){state.previewIdx=-1;el.innerHTML='<div class="empty">Pick a color — the globe flies to where Sentinel-2 saw it.</div>';return;}
+  state.previewIdx=state.selIdx;el.innerHTML=bigPrev(state.selIdx);paintBig(state.selIdx);}
+function updateStats(){if(!state.cells)return;let n=0;for(const c of state.cells)if(c>=0)n++;document.getElementById('sPainted').textContent=n;}
+
+/* ---------- map (Leaflet — robust 2D raster + DOM/canvas layers) ----------
+   NOTE: Leaflet uses [lat, lon]; our palette stores c[5]=lon, c[6]=lat. */
+let map,mapReady=false,rend,ambientLayer,paintLayer,selLayer,flashLayer;
+function initMap(){
+  map=L.map('map',{worldCopyJump:true,zoomControl:false,minZoom:2,maxZoom:19,
+    center:[25,10],zoom:2.4});
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {attribution:'Esri World Imagery',maxZoom:19,maxNativeZoom:18}).addTo(map);
+  L.control.zoom({position:'topright'}).addTo(map);
+  map.attributionControl.setPosition('bottomleft');
+  rend=L.canvas({padding:0.5});                       // fast renderer for many dots
+  // ambient field: a colored sample of the whole palette
+  ambientLayer=L.layerGroup().addTo(map);
+  const C=DATA.colors,step=Math.max(1,Math.floor(C.length/1500));  // ~1500 ambient dots, not 3000
+  for(let i=0;i<C.length;i+=step){const c=C[i];
+    L.circleMarker([c[6],c[5]],{renderer:rend,radius:5.5,weight:0.6,color:'#0e0b08',
+      fillColor:toHex(c.slice(0,3)),fillOpacity:1})
+      .on('click',()=>selectColor(c.slice(0,3),false,true)).addTo(ambientLayer);}
+  paintLayer=L.layerGroup().addTo(map);
+  selLayer=L.layerGroup().addTo(map);
+  flashLayer=L.layerGroup().addTo(map);
+  mapReady=true;updateSelPin();refreshPins();flyToSelected(4);
+}
+function updateSelPin(){if(!mapReady)return;selLayer.clearLayers();if(state.selIdx<0)return;
+  const c=DATA.colors[state.selIdx],ll=[c[6],c[5]],col=toHex(c.slice(0,3)),sc=DATA.scenes[c[7]];
+  L.circleMarker(ll,{radius:18,weight:0,fillColor:col,fillOpacity:0.28}).addTo(selLayer);          // glow
+  L.circleMarker(ll,{radius:8,weight:3,color:'#fff',fillColor:col,fillOpacity:1}).addTo(selLayer); // dot
+  const icon=L.divIcon({className:'sel-pin-wrap',iconSize:[28,38],iconAnchor:[14,38],
+    html:`<div class="sel-pin"><svg width="28" height="38" viewBox="0 0 28 38"><path d="M14 0C6.3 0 0 6.3 0 14c0 9.7 14 24 14 24s14-14.3 14-24C28 6.3 21.7 0 14 0z" fill="${col}" stroke="#fff" stroke-width="2"/><circle cx="14" cy="14" r="5.2" fill="rgba(255,255,255,0.92)"/></svg></div>`});
+  L.marker(ll,{icon}).addTo(selLayer)
+    .bindPopup(`<div class="pin-pop"><b>${col}</b>${sc[0]}<br>${sc[1]} · ${c[6].toFixed(3)}, ${c[5].toFixed(3)}</div>`);}
+function flyToSelected(z){if(!mapReady||state.tab!=='map'||state.selIdx<0)return;const c=DATA.colors[state.selIdx];
+  const zoom=(typeof z==='number'&&isFinite(z))?z:Math.max(map.getZoom(),8);  // guard: never a NaN/Event zoom
+  map.stop();map.flyTo([c[6],c[5]],zoom,{duration:0.8});}
+// switch to the map tab and reliably fly to the selected patch (deferred so the
+// just-un-hidden map has real dimensions before flyTo runs)
+function jumpToSelected(){if(state.selIdx<0)return;showTab('map');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{if(map)map.invalidateSize();flyToSelected(11);}));}
+// select a specific patch (e.g. one shown in a preview) and jump to it on the map
+function jumpToIdx(idx){if(idx<0)return;selectColor(DATA.colors[idx].slice(0,3),false,false);jumpToSelected();}
+function refreshPins(){if(!mapReady)return;paintLayer.clearLayers();
+  const seen=new Set(),uniq=[];
+  if(state.cells)for(const ci of state.cells){if(ci<0||seen.has(ci))continue;seen.add(ci);uniq.push(ci);}
+  const CAP=2500;let list=uniq;                     // a big mosaic can use 10000s of patches
+  if(uniq.length>CAP){list=[];for(let i=0;i<CAP;i++)list.push(uniq[Math.floor(i*uniq.length/CAP)]);}
+  for(const ci of list){const c=DATA.colors[ci];
+    L.circleMarker([c[6],c[5]],{renderer:rend,radius:4.5,weight:1,color:'#fff',
+      fillColor:toHex(c.slice(0,3)),fillOpacity:0.95}).addTo(paintLayer);}
+  document.getElementById('maptag').textContent=(state.tab==='canvas'
+    ? uniq.length.toLocaleString()+' source patches'+(uniq.length>CAP?' · showing '+CAP:'')
+    : 'palette field');}
+function flashMarker(lon,lat){if(!mapReady)return;flashLayer.clearLayers();
+  L.circleMarker([lat,lon],{radius:11,weight:2,color:'#fff',fillColor:'#e37148',fillOpacity:0.6}).addTo(flashLayer);}
+
+/* ---------- tabs ---------- */
+function showTab(t){state.tab=t;
+  document.getElementById('tabMap').classList.toggle('on',t==='map');
+  document.getElementById('tabCanvas').classList.toggle('on',t==='canvas');
+  document.getElementById('mapView').classList.toggle('hidden',t!=='map');
+  document.getElementById('canvasView').classList.toggle('hidden',t!=='canvas');
+  document.getElementById('canvasTools').classList.toggle('hidden',t!=='canvas');
+  document.getElementById('statPainted').style.display=t==='canvas'?'flex':'none';
+  if(t==='map'){if(map)map.invalidateSize();updateSelectedReadout();updateSelPin();flyToSelected();}
+  else{document.getElementById('ctxTitle').textContent='Under the cursor';state.previewIdx=-1;
+    document.getElementById('ctxBody').innerHTML='<div class="empty">Hover a painted tile to enlarge it · click the preview to fly there · ⌘/ctrl-click a tile to jump.</div>';
+    refreshPins();}
+  refreshPins();}
+document.getElementById('tabMap').addEventListener('click',()=>showTab('map'));
+document.getElementById('tabCanvas').addEventListener('click',()=>showTab('canvas'));
+
+/* ---------- boot ---------- */
+async function boot(){
+  DATA=await (await fetch('colors.json')).json();
+  buildBuckets();buildOcc();                 // fast — color matching ready immediately
+  document.getElementById('sColors').textContent=DATA.colors.length.toLocaleString();
+  document.getElementById('sScenes').textContent=DATA.scenes.length.toLocaleString();
+  document.getElementById('loading').style.display='none';
+  renderSV();placeKnob();setupBoard(24,24);initMap();
+  selectColor([70,90,55],false,false);showTab('canvas');  // land on the recreate tab
+  // load patch imagery (atlas) in the BACKGROUND; refresh previews once it's in
+  Promise.all(DATA.pages.map((p,i)=>new Promise(res=>{const im=new Image();im.onload=()=>{atlases[i]=im;res();};im.onerror=res;im.src=p;})))
+    .then(()=>{updateSelectedReadout();if(state.selIdx>=0)drawPatch(document.getElementById('swMatch').getContext('2d'),state.selIdx,0,0,32,32);});
+}
+// help / about popup — auto-opens on first visit
+(function(){const ov=document.getElementById('helpOverlay');
+  const close=()=>{ov.classList.add('hidden');try{localStorage.setItem('s2paint_help_seen','1');}catch(e){}};
+  document.getElementById('helpBtn').addEventListener('click',()=>ov.classList.remove('hidden'));
+  document.getElementById('helpClose').addEventListener('click',close);
+  document.getElementById('helpGo').addEventListener('click',close);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});  // click backdrop to dismiss
+  let seen=false;try{seen=localStorage.getItem('s2paint_help_seen');}catch(e){}
+  if(!seen)ov.classList.remove('hidden');
+})();
+
+boot();
+</script>
+</body>
+</html>

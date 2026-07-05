@@ -1,0 +1,21 @@
+# Harvested palettes / demo output (regenerate with harvest.py / demo.py)
+data/
+data_demo/
+
+# Built web assets (regenerate with build_web.py; the live site is hosted separately)
+web/atlas_*.jpg
+web/colors.json
+
+# Logs
+*.log
+
+# Local working copies of images (the app uses web/examples/*)
+/marymoor.png
+/nasa+harvest.png
+/nasa_logo.png
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
