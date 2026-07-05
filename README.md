@@ -5,11 +5,16 @@
 Search the Sentinel-2 archive for 32×32 image patches, take the mean color of each patch, and keep one georeferenced thumbnail per unique (R,G,B) value. The result is a palette of real Earth colors, plus a single-page app that uses it two ways: pick a color and the globe flies to where Sentinel-2 saw it, or upload a photo and watch it rebuilt as a mosaic of real satellite patches. A harvest of ~370 curated and random Sentinel-2 scenes yields ~93k unique colors, each backed by a thumbnail and a lat/lon. Live demo: [calebrob.com/static/s2-paint](https://calebrob.com/static/s2-paint/).
 
 <p align="center">
-  <img src="images/s2-paint.png" width="49%" alt="Canvas view: the NASA logo rebuilt from thousands of Sentinel-2 patches">
-  <img src="images/pallete-view.png" width="49%" alt="Map view: where on Earth each palette color was sampled from">
+  <img src="images/s2-paint.png" width="820" alt="Canvas tab: the NASA logo rebuilt from thousands of Sentinel-2 patches">
 </p>
 
-**Figure 1.** The single-page [webapp](https://calebrob.com/static/s2-paint/). (Left) The *Canvas* tab, where the NASA logo has been rebuilt from real Sentinel-2 patches, nearest color per cell; clicking a tile traces it back to its source scene and lat/lon. (Right) The *Map* tab, a Leaflet globe over Esri World Imagery showing where each palette color was sampled; picking a color flies the globe to that spot. Only colors that occur in the imagery are selectable in the picker, and every pick snaps to the nearest real patch.
+**Figure 1.** The *Canvas* tab of the [webapp](https://calebrob.com/static/s2-paint/). The NASA logo has been rebuilt from real Sentinel-2 patches, nearest color per cell; clicking a tile traces it back to its source scene and lat/lon.
+
+<p align="center">
+  <img src="images/pallete-view.png" width="820" alt="Map tab: where on Earth each palette color was sampled from">
+</p>
+
+**Figure 2.** The *Map* tab of the [webapp](https://calebrob.com/static/s2-paint/), a Leaflet globe over Esri World Imagery showing where each palette color was sampled. Picking a color flies the globe to that spot. Only colors that occur in the imagery are selectable in the picker, and every pick snaps to the nearest real patch.
 
 ## Quick start
 
