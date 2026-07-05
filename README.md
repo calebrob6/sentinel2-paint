@@ -2,19 +2,19 @@
 
 **Jump to: [Live site](https://calebrob.com/static/s2-paint/) | [Quick start](#quick-start) | [How it works](#how-it-works) | [The app](#the-app) | [Scripts](#scripts) | [Citation](#citation)**
 
-Search the Sentinel-2 archive for 32×32 image patches, take the mean color of each patch, and keep one georeferenced thumbnail per unique (R,G,B) value. The result is a palette of real Earth colors, plus a single-page app that uses it two ways: pick a color and the globe flies to where Sentinel-2 saw it, or upload a photo and watch it rebuilt as a mosaic of real satellite patches. A harvest of ~370 curated and random Sentinel-2 scenes yields ~93k unique colors, each backed by a thumbnail and a lat/lon. Live demo: [calebrob.com/static/s2-paint](https://calebrob.com/static/s2-paint/).
+Search the Sentinel-2 archive for 32×32 image patches, take the mean color of each patch, and keep one georeferenced thumbnail per unique (R,G,B) value. Together they form a palette of real Earth colors that drives a single-page app two ways: pick a color and the globe flies to where Sentinel-2 saw it, or upload a photo and the app rebuilds it as a mosaic of real satellite patches. A harvest of ~370 curated and random Sentinel-2 scenes yields ~93k unique colors, each with a thumbnail and a lat/lon. Live demo: [calebrob.com/static/s2-paint](https://calebrob.com/static/s2-paint/).
 
 <p align="center">
   <img src="images/s2-paint.png" width="820" alt="Canvas tab: the NASA logo rebuilt from thousands of Sentinel-2 patches">
 </p>
 
-**Figure 1.** The *Canvas* tab of the [webapp](https://calebrob.com/static/s2-paint/). The NASA logo has been rebuilt from real Sentinel-2 patches, nearest color per cell; clicking a tile traces it back to its source scene and lat/lon.
+**Figure 1.** The *Canvas* tab of the [webapp](https://calebrob.com/static/s2-paint/) rebuilds an uploaded image, here the NASA logo, from real Sentinel-2 patches (nearest color per cell). Click any tile to trace it back to its source scene and lat/lon.
 
 <p align="center">
   <img src="images/pallete-view.png" width="820" alt="Map tab: where on Earth each palette color was sampled from">
 </p>
 
-**Figure 2.** The *Map* tab of the [webapp](https://calebrob.com/static/s2-paint/), a Leaflet globe over Esri World Imagery showing where each palette color was sampled. Picking a color flies the globe to that spot. Only colors that occur in the imagery are selectable in the picker, and every pick snaps to the nearest real patch.
+**Figure 2.** The *Map* tab of the [webapp](https://calebrob.com/static/s2-paint/) shows a Leaflet globe over Esri World Imagery marking where Sentinel-2 sampled each palette color. Pick a color and the globe flies to that spot. The picker only offers colors that occur in the imagery, and every pick snaps to the nearest real patch.
 
 ## Quick start
 
