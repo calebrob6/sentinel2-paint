@@ -1,0 +1,65 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out app
+        uses: actions/checkout@v4
+
+      # The generated palette is too large to keep in this repository. Until it
+      # is regenerated, reuse the copy already published by the user site.
+      - name: Check out generated palette
+        uses: actions/checkout@v4
+        with:
+          repository: calebrob6/calebrob6.github.io
+          ref: master
+          path: legacy-site
+          sparse-checkout: static/s2-paint
+
+      - name: Assemble site
+        run: |
+          mkdir _site
+          cp -R web/. _site/
+          cp legacy-site/static/s2-paint/colors.json _site/
+          cp legacy-site/static/s2-paint/atlas_*.jpg _site/
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          site = Path("_site")
+          data = json.loads((site / "colors.json").read_text())
+          missing = [page for page in data["pages"] if not (site / page).is_file()]
+          if missing:
+              raise SystemExit(f"Missing palette atlas files: {missing}")
+          PY
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
