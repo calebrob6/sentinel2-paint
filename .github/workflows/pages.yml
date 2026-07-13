@@ -23,12 +23,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out app
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The generated palette is too large to keep in this repository. Until it
       # is regenerated, reuse the copy already published by the user site.
       - name: Check out generated palette
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: calebrob6/calebrob6.github.io
           ref: master
@@ -53,10 +53,10 @@ jobs:
           PY
 
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
